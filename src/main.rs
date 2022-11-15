@@ -1,13 +1,29 @@
 use std::collections::HashMap;
 
+trait Clock {
+    fn current_timestamp(&self) -> i64;
+}
+
+struct FixedClock {
+    value: i64,
+}
+
+impl Clock for FixedClock {
+    fn current_timestamp(&self) -> i64 {
+        self.value
+    }
+}
+
 #[derive(Debug)]
 struct RequestInfo {
-    timestamp: i32,
+    unix_timestamp: i64,
 }
 
 impl RequestInfo {
-    fn new(timestamp: i32) -> RequestInfo {
-        return RequestInfo { timestamp };
+    fn new(clock: &impl Clock) -> RequestInfo {
+        RequestInfo {
+            unix_timestamp: clock.current_timestamp(),
+        }
     }
 }
 
@@ -25,7 +41,11 @@ impl RequestKey {
 }
 
 #[derive(Debug)]
-struct RateLimiter {
+struct RateLimiter<'a, C>
+where
+    C: Clock,
+{
+    clock: &'a C,
     limit: usize,
     requests: HashMap<RequestKey, Vec<RequestInfo>>,
 }
@@ -39,26 +59,30 @@ enum RequestProcessingResponse {
 type RequestProcessingResult =
     std::result::Result<RequestProcessingResponse, Box<dyn std::error::Error>>;
 
-impl RateLimiter {
-    fn new(limit: usize) -> RateLimiter {
+impl<'a, C> RateLimiter<'a, C>
+where
+    C: Clock,
+{
+    fn new(clock: &'a C, limit: usize) -> RateLimiter<C> {
         return RateLimiter {
+            clock,
             limit,
             requests: HashMap::new(),
         };
     }
 
-    fn add_request(&mut self, address: &RequestKey, timestamp: i32) -> RequestProcessingResult {
+    fn add_request(&mut self, address: &RequestKey) -> RequestProcessingResult {
         let requests = self.requests.get_mut(&address);
         if let Some(requests) = requests {
             if requests.len() < self.limit {
-                let request_info = RequestInfo::new(timestamp);
+                let request_info = RequestInfo::new(self.clock);
                 requests.push(request_info);
                 Ok(RequestProcessingResponse::Allow)
             } else {
                 Ok(RequestProcessingResponse::Deny)
             }
         } else {
-            let request_info = RequestInfo::new(timestamp);
+            let request_info = RequestInfo::new(self.clock);
             self.requests.insert(address.clone(), vec![request_info]);
             Ok(RequestProcessingResponse::Allow)
         }
@@ -67,32 +91,33 @@ impl RateLimiter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{RateLimiter, RequestKey, RequestProcessingResponse};
+    use crate::{FixedClock, RateLimiter, RequestKey, RequestProcessingResponse};
 
     #[test]
     fn rate_limiter_works() {
-        let mut rate_limiter = RateLimiter::new(2);
+        let clock = FixedClock { value: 100 };
+        let mut rate_limiter = RateLimiter::new(&clock, 2);
 
         let address = RequestKey::new("1.1.1.1");
         assert_eq!(
-            rate_limiter.add_request(&address, 100).unwrap(),
+            rate_limiter.add_request(&address).unwrap(),
             RequestProcessingResponse::Allow,
             "first request is allowed"
         );
         assert_eq!(
-            rate_limiter.add_request(&address, 100).unwrap(),
+            rate_limiter.add_request(&address).unwrap(),
             RequestProcessingResponse::Allow,
             "second request is allowed"
         );
         assert_eq!(
-            rate_limiter.add_request(&address, 100).unwrap(),
+            rate_limiter.add_request(&address).unwrap(),
             RequestProcessingResponse::Deny,
             "third request is denied"
         );
 
         let address_2 = RequestKey::new("2.2.2.2");
         assert_eq!(
-            rate_limiter.add_request(&address_2, 100).unwrap(),
+            rate_limiter.add_request(&address_2).unwrap(),
             RequestProcessingResponse::Allow,
             "a request on another address is allowed"
         );
