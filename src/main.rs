@@ -1,18 +1,8 @@
 use std::collections::HashMap;
 
-trait Clock {
-    fn current_timestamp(&self) -> i64;
-}
+use clock::Clock;
 
-struct FixedClock {
-    value: i64,
-}
-
-impl Clock for FixedClock {
-    fn current_timestamp(&self) -> i64 {
-        self.value
-    }
-}
+mod clock;
 
 #[derive(Debug)]
 struct RequestInfo {
@@ -91,7 +81,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{FixedClock, RateLimiter, RequestKey, RequestProcessingResponse};
+    use crate::{clock::FixedClock, RateLimiter, RequestKey, RequestProcessingResponse};
 
     #[test]
     fn rate_limiter_works() {
