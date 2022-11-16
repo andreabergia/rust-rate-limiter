@@ -1,13 +1,15 @@
+type UnixTimestamp = i64;
+
 pub trait Clock {
-    fn current_timestamp(&self) -> i64;
+    fn current_timestamp(&self) -> UnixTimestamp;
 }
 
 pub struct FixedClock {
-    pub value: i64,
+    pub value: UnixTimestamp,
 }
 
 impl Clock for FixedClock {
-    fn current_timestamp(&self) -> i64 {
+    fn current_timestamp(&self) -> UnixTimestamp {
         self.value
     }
 }
