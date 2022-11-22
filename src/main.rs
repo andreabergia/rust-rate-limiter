@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::RefCell,
     collections::{HashMap, VecDeque},
     rc::Rc,
 };
@@ -14,10 +14,7 @@ struct RequestInfo {
 }
 
 impl RequestInfo {
-    fn new<C>(clock: Ref<C>) -> RequestInfo
-    where
-        C: Clock,
-    {
+    fn new<C: Clock>(clock: &C) -> RequestInfo {
         RequestInfo {
             unix_timestamp: clock.current_timestamp(),
         }
@@ -80,7 +77,7 @@ where
         address: RequestKey,
         mut requests: VecDeque<RequestInfo>,
     ) -> RequestProcessingResponse {
-        let request_info = RequestInfo::new::<C>(self.clock.borrow());
+        let request_info = RequestInfo::new(&self.clock.borrow() as &C);
         if requests.len() < self.limit {
             requests.push_back(request_info);
             self.requests.insert(address, requests);
@@ -91,7 +88,7 @@ where
     }
 
     fn add_request_for_new_source(&mut self, address: RequestKey) -> RequestProcessingResponse {
-        let request_info = RequestInfo::new(self.clock.borrow());
+        let request_info = RequestInfo::new(&self.clock.borrow() as &C);
         let requests = VecDeque::from([request_info]);
         self.requests.insert(address, requests);
         RequestProcessingResponse::Allow
@@ -171,29 +168,56 @@ mod tests {
     fn passage_of_time_means_queue_clears_up() {
         let address = RequestKey::new("1.1.1.1");
         let clock = Rc::new(RefCell::new(FixedClock { value: 1 }));
-        let mut rate_limiter = RateLimiter::new(Rc::clone(&clock), 1);
+        let mut rate_limiter = RateLimiter::new(Rc::clone(&clock), 2);
 
         assert_eq!(
             rate_limiter.add_request(address.clone()),
             RequestProcessingResponse::Allow,
-            "first request is allowed"
+            "request #1 is allowed at time 1"
+        );
+        assert_eq!(
+            rate_limiter.add_request(address.clone()),
+            RequestProcessingResponse::Allow,
+            "request #2 is allowed at time 1"
         );
         assert_eq!(
             rate_limiter.add_request(address.clone()),
             RequestProcessingResponse::Deny,
-            "second request is not allowed"
+            "request #3 is not allowed at time 1"
         );
 
         clock.as_ref().borrow_mut().value = 2;
+        let r = rate_limiter.add_request(address.clone());
+        assert_eq!(
+            r,
+            RequestProcessingResponse::Deny,
+            "request #4 is not allowed at time 2 since slots are used"
+        );
+
+        clock.as_ref().borrow_mut().value = 3;
         assert_eq!(
             rate_limiter.add_request(address.clone()),
             RequestProcessingResponse::Allow,
-            "after time passes, third request is allowed"
+            "request #5 is allowed at time 3 since time passed and two slots freed"
+        );
+
+        clock.as_ref().borrow_mut().value = 4;
+        assert_eq!(
+            rate_limiter.add_request(address.clone()),
+            RequestProcessingResponse::Allow,
+            "request #6 is allowed at time 4 since one slot is free"
         );
         assert_eq!(
             rate_limiter.add_request(address.clone()),
             RequestProcessingResponse::Deny,
-            "after time passes, fourth request is not allowed"
+            "request #7 is not allowed at time 4 since no slots are free"
+        );
+
+        clock.as_ref().borrow_mut().value = 5;
+        assert_eq!(
+            rate_limiter.add_request(address.clone()),
+            RequestProcessingResponse::Allow,
+            "request #7 is allowed at time 5 since one slot is free"
         );
     }
 }
