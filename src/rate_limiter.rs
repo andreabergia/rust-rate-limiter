@@ -37,6 +37,7 @@ where
 {
     clock: Rc<RefCell<C>>,
     limit: usize,
+    ticks: usize,
     requests: HashMap<RequestKey, VecDeque<RequestInfo>>,
 }
 
@@ -53,10 +54,11 @@ impl<C> RateLimiter<C>
 where
     C: Clock,
 {
-    fn new(clock: Rc<RefCell<C>>, limit: usize) -> RateLimiter<C> {
+    fn new(clock: Rc<RefCell<C>>, limit: usize, ticks: usize) -> RateLimiter<C> {
         return RateLimiter {
             clock,
             limit,
+            ticks,
             requests: HashMap::new(),
         };
     }
@@ -120,7 +122,7 @@ where
 
     fn can_be_discarded(&self, front: Option<&RequestInfo>, now: i64) -> bool {
         match front {
-            Some(req) => (req.unix_timestamp + self.limit as i64) <= now,
+            Some(req) => (req.unix_timestamp + (self.limit * self.ticks) as i64) <= now,
             None => false,
         }
     }
@@ -138,7 +140,7 @@ mod tests {
     #[test]
     fn requests_are_independent() {
         let clock = Rc::new(RefCell::new(FixedClock { value: 100 }));
-        let mut rate_limiter = RateLimiter::new(clock, 2);
+        let mut rate_limiter = RateLimiter::new(clock, 2, 1);
 
         let address = RequestKey::new("1.1.1.1");
         assert_eq!(
@@ -169,7 +171,7 @@ mod tests {
     fn passage_of_time_means_queue_clears_up() {
         let address = RequestKey::new("1.1.1.1");
         let clock = Rc::new(RefCell::new(FixedClock { value: 1 }));
-        let mut rate_limiter = RateLimiter::new(Rc::clone(&clock), 2);
+        let mut rate_limiter = RateLimiter::new(Rc::clone(&clock), 2, 1);
 
         assert_eq!(
             rate_limiter.add_request(address.clone()),
@@ -219,6 +221,33 @@ mod tests {
             rate_limiter.add_request(address.clone()),
             RequestProcessingResponse::Allow,
             "request #7 is allowed at time 5 since one slot is free"
+        );
+    }
+
+    #[test]
+    fn ticks_work() {
+        let clock = Rc::new(RefCell::new(FixedClock { value: 1 }));
+        let mut rate_limiter = RateLimiter::new(clock.clone(), 1, 100);
+
+        let address = RequestKey::new("1.1.1.1");
+        assert_eq!(
+            rate_limiter.add_request(address.clone()),
+            RequestProcessingResponse::Allow,
+            "request #1 is allowed"
+        );
+
+        clock.as_ref().borrow_mut().value = 100;
+        assert_eq!(
+            rate_limiter.add_request(address.clone()),
+            RequestProcessingResponse::Deny,
+            "request #2 is not allowed at time 100"
+        );
+
+        clock.as_ref().borrow_mut().value = 101;
+        assert_eq!(
+            rate_limiter.add_request(address.clone()),
+            RequestProcessingResponse::Allow,
+            "request #3 is again allowed at time 101"
         );
     }
 }
