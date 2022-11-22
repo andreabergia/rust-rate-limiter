@@ -8,13 +8,13 @@ use crate::clock::Clock;
 
 #[derive(Debug, Clone)]
 struct RequestInfo {
-    unix_timestamp: i64,
+    timestamp: i64,
 }
 
 impl RequestInfo {
     fn new<C: Clock>(clock: &C) -> RequestInfo {
         RequestInfo {
-            unix_timestamp: clock.current_timestamp(),
+            timestamp: clock.current_timestamp(),
         }
     }
 }
@@ -100,7 +100,7 @@ where
         mut requests: VecDeque<RequestInfo>,
         request_info: RequestInfo,
     ) -> RequestProcessingResponse {
-        let now = request_info.unix_timestamp;
+        let now = request_info.timestamp;
 
         let mut updated = false;
         while self.can_be_discarded(requests.front(), now) {
@@ -122,7 +122,7 @@ where
 
     fn can_be_discarded(&self, front: Option<&RequestInfo>, now: i64) -> bool {
         match front {
-            Some(req) => (req.unix_timestamp + (self.limit * self.ticks) as i64) <= now,
+            Some(req) => (req.timestamp + (self.limit * self.ticks) as i64) <= now,
             None => false,
         }
     }
