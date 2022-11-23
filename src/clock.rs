@@ -1,4 +1,4 @@
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 
 type UnixTimestamp = i64;
 
