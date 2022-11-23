@@ -22,7 +22,7 @@ impl Clock for MillisecondsUnixClock {
     fn current_timestamp(&self) -> UnixTimestamp {
         let nanos = OffsetDateTime::now_utc().unix_timestamp_nanos();
         let millis = nanos / 1_000_000;
-        return millis as UnixTimestamp;
+        millis as UnixTimestamp
     }
 }
 

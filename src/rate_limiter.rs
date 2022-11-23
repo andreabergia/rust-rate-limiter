@@ -27,9 +27,9 @@ pub struct RequestKey {
 
 impl RequestKey {
     pub fn new(address: &str) -> RequestKey {
-        return RequestKey {
+        RequestKey {
             address: address.into(),
-        };
+        }
     }
 }
 pub struct RateLimiter<C>
@@ -94,12 +94,12 @@ where
     C: Clock,
 {
     pub fn new(clock: Arc<Mutex<C>>, limit: usize, ticks: usize) -> RateLimiter<C> {
-        return RateLimiter {
+        RateLimiter {
             clock,
             limit,
             ticks,
             requests: HashMap::new(),
-        };
+        }
     }
 
     pub fn try_add_request(&mut self, address: RequestKey) -> RequestProcessingResult {
