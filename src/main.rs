@@ -6,7 +6,7 @@ use std::{
 use axum::{http::StatusCode, response::IntoResponse, routing::get, Extension, Router};
 use clock::UnixEpochMillisecondsClock;
 use error::Result;
-use rate_limiter::{RateLimiter, RequestProcessingResponse, SourceAddress};
+use rate_limiter::{RateLimiter, RequestKey, RequestProcessingResponse};
 
 mod clock;
 mod error;
@@ -38,7 +38,7 @@ async fn say_hello_rate_limited(
     Extension(rate_limiter): Extension<Arc<Mutex<RateLimiterOfUnixEpochMsClock>>>,
 ) -> Result<impl IntoResponse> {
     // TODO: extract source address
-    let address = SourceAddress::new("todo");
+    let address = RequestKey::new("todo");
     let result = rate_limiter.lock()?.try_add_request(address)?;
     match result {
         RequestProcessingResponse::Allow => Ok((StatusCode::OK, "Hello!").into_response()),

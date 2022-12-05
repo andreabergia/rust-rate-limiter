@@ -20,11 +20,11 @@ impl RequestTimestamp {
 }
 
 #[derive(Debug, Default, Hash, Eq, PartialEq, Clone)]
-pub struct SourceAddress(String);
+pub struct RequestKey(String);
 
-impl SourceAddress {
-    pub fn new(address: &str) -> SourceAddress {
-        SourceAddress(address.to_string())
+impl RequestKey {
+    pub fn new(key: &str) -> RequestKey {
+        RequestKey(key.to_string())
     }
 }
 
@@ -35,7 +35,7 @@ where
     clock: Arc<Mutex<C>>,
     limit: usize,
     ticks: usize,
-    requests: HashMap<SourceAddress, VecDeque<RequestTimestamp>>,
+    requests: HashMap<RequestKey, VecDeque<RequestTimestamp>>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -59,34 +59,34 @@ where
         }
     }
 
-    pub fn try_add_request(&mut self, address: SourceAddress) -> RequestProcessingResult {
+    pub fn try_add_request(&mut self, key: RequestKey) -> RequestProcessingResult {
         let now = RequestTimestamp::new(self.clock.lock()?.ticks_elapsed());
-        let requests = self.requests.get(&address);
+        let requests = self.requests.get(&key);
         if let Some(requests) = requests {
-            self.add_to_existing_requests(address, now, requests.clone())
+            self.add_to_existing_requests(key, now, requests.clone())
         } else {
-            self.add_request_for_new_source(address, now)
+            self.add_request_for_new_key(key, now)
         }
     }
 
     fn add_to_existing_requests(
         &mut self,
-        address: SourceAddress,
+        key: RequestKey,
         now: RequestTimestamp,
         mut requests: VecDeque<RequestTimestamp>,
     ) -> RequestProcessingResult {
         if requests.len() < self.limit {
             requests.push_back(now);
-            self.requests.insert(address, requests);
+            self.requests.insert(key, requests);
             Ok(RequestProcessingResponse::Allow)
         } else {
-            self.check_if_slots_can_be_freed(address, now, requests)
+            self.check_if_slots_can_be_freed(key, now, requests)
         }
     }
 
     fn check_if_slots_can_be_freed(
         &mut self,
-        address: SourceAddress,
+        key: RequestKey,
         now: RequestTimestamp,
         mut requests: VecDeque<RequestTimestamp>,
     ) -> RequestProcessingResult {
@@ -96,7 +96,7 @@ where
 
         if requests.len() < self.limit {
             requests.push_back(now);
-            self.requests.insert(address, requests);
+            self.requests.insert(key, requests);
             Ok(RequestProcessingResponse::Allow)
         } else {
             Ok(RequestProcessingResponse::Deny)
@@ -110,13 +110,13 @@ where
         }
     }
 
-    fn add_request_for_new_source(
+    fn add_request_for_new_key(
         &mut self,
-        address: SourceAddress,
+        key: RequestKey,
         now: RequestTimestamp,
     ) -> RequestProcessingResult {
         let requests = VecDeque::from([now]);
-        self.requests.insert(address, requests);
+        self.requests.insert(key, requests);
         Ok(RequestProcessingResponse::Allow)
     }
 }
@@ -127,7 +127,7 @@ mod tests {
 
     use crate::{
         clock::{FixedClock, Ticks},
-        rate_limiter::{RateLimiter, RequestProcessingResponse, SourceAddress},
+        rate_limiter::{RateLimiter, RequestKey, RequestProcessingResponse},
     };
 
     #[test]
@@ -135,82 +135,82 @@ mod tests {
         let clock = Arc::new(Mutex::new(FixedClock { value: Ticks(100) }));
         let mut rate_limiter = RateLimiter::new(clock, 2, 1);
 
-        let address = SourceAddress::new("1.1.1.1");
+        let key = RequestKey::new("1.1.1.1");
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "first request is allowed"
         );
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "second request is allowed"
         );
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "third request is denied"
         );
 
-        let address_2 = SourceAddress::new("2.2.2.2");
+        let key_2 = RequestKey::new("2.2.2.2");
         assert_eq!(
-            rate_limiter.try_add_request(address_2).unwrap(),
+            rate_limiter.try_add_request(key_2).unwrap(),
             RequestProcessingResponse::Allow,
-            "a request on another address is allowed"
+            "a request on another key is allowed"
         );
     }
 
     #[test]
     fn passage_of_time_means_queue_clears_up() {
-        let address = SourceAddress::new("1.1.1.1");
+        let key = RequestKey::new("1.1.1.1");
         let clock = Arc::new(Mutex::new(FixedClock { value: Ticks(1) }));
         let mut rate_limiter = RateLimiter::new(Arc::clone(&clock), 2, 1);
 
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #1 is allowed at time 1"
         );
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #2 is allowed at time 1"
         );
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #3 is not allowed at time 1"
         );
 
         clock.lock().unwrap().value = Ticks(2);
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #4 is not allowed at time 2 since slots are used"
         );
 
         clock.lock().unwrap().value = Ticks(3);
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #5 is allowed at time 3 since time passed and two slots freed"
         );
 
         clock.lock().unwrap().value = Ticks(4);
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #6 is allowed at time 4 since one slot is free"
         );
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #7 is not allowed at time 4 since no slots are free"
         );
 
         clock.lock().unwrap().value = Ticks(5);
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #7 is allowed at time 5 since one slot is free"
         );
@@ -221,23 +221,23 @@ mod tests {
         let clock = Arc::new(Mutex::new(FixedClock { value: Ticks(1) }));
         let mut rate_limiter = RateLimiter::new(clock.clone(), 1, 100);
 
-        let address = SourceAddress::new("1.1.1.1");
+        let key = RequestKey::new("1.1.1.1");
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #1 is allowed"
         );
 
         clock.lock().unwrap().value = Ticks(100);
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #2 is not allowed at time 100"
         );
 
         clock.lock().unwrap().value = Ticks(101);
         assert_eq!(
-            rate_limiter.try_add_request(address.clone()).unwrap(),
+            rate_limiter.try_add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #3 is again allowed at time 101"
         );
