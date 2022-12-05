@@ -1,6 +1,6 @@
 use time::OffsetDateTime;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Ticks(pub i64);
 
 pub trait Clock {
