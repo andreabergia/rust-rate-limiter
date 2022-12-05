@@ -115,7 +115,8 @@ where
         key: RequestKey,
         now: RequestTimestamp,
     ) -> RequestProcessingResult {
-        let requests = VecDeque::from([now]);
+        let mut requests = VecDeque::with_capacity(self.limit);
+        requests.push_back(now);
         self.requests.insert(key, requests);
         Ok(RequestProcessingResponse::Allow)
     }
