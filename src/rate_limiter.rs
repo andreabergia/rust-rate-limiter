@@ -3,7 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{clock::Clock, error::RateLimiterError};
+use crate::{
+    clock::{Clock, Ticks},
+    error::RateLimiterError,
+};
 
 #[derive(Debug, Clone)]
 struct RequestTimestamp {
@@ -11,8 +14,8 @@ struct RequestTimestamp {
 }
 
 impl RequestTimestamp {
-    fn new(timestamp: i64) -> RequestTimestamp {
-        RequestTimestamp { timestamp }
+    fn new(ticks: Ticks) -> RequestTimestamp {
+        RequestTimestamp { timestamp: ticks.0 }
     }
 }
 
@@ -57,7 +60,7 @@ where
     }
 
     pub fn try_add_request(&mut self, address: SourceAddress) -> RequestProcessingResult {
-        let now = RequestTimestamp::new(self.clock.lock()?.current_timestamp());
+        let now = RequestTimestamp::new(self.clock.lock()?.ticks_elapsed());
         let requests = self.requests.get(&address);
         if let Some(requests) = requests {
             self.add_to_existing_requests(address, now, requests.clone())
@@ -123,13 +126,13 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use crate::{
-        clock::FixedClock,
+        clock::{FixedClock, Ticks},
         rate_limiter::{RateLimiter, RequestProcessingResponse, SourceAddress},
     };
 
     #[test]
     fn requests_are_independent() {
-        let clock = Arc::new(Mutex::new(FixedClock { value: 100 }));
+        let clock = Arc::new(Mutex::new(FixedClock { value: Ticks(100) }));
         let mut rate_limiter = RateLimiter::new(clock, 2, 1);
 
         let address = SourceAddress::new("1.1.1.1");
@@ -160,7 +163,7 @@ mod tests {
     #[test]
     fn passage_of_time_means_queue_clears_up() {
         let address = SourceAddress::new("1.1.1.1");
-        let clock = Arc::new(Mutex::new(FixedClock { value: 1 }));
+        let clock = Arc::new(Mutex::new(FixedClock { value: Ticks(1) }));
         let mut rate_limiter = RateLimiter::new(Arc::clone(&clock), 2, 1);
 
         assert_eq!(
@@ -179,21 +182,21 @@ mod tests {
             "request #3 is not allowed at time 1"
         );
 
-        clock.lock().unwrap().value = 2;
+        clock.lock().unwrap().value = Ticks(2);
         assert_eq!(
             rate_limiter.try_add_request(address.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #4 is not allowed at time 2 since slots are used"
         );
 
-        clock.lock().unwrap().value = 3;
+        clock.lock().unwrap().value = Ticks(3);
         assert_eq!(
             rate_limiter.try_add_request(address.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #5 is allowed at time 3 since time passed and two slots freed"
         );
 
-        clock.lock().unwrap().value = 4;
+        clock.lock().unwrap().value = Ticks(4);
         assert_eq!(
             rate_limiter.try_add_request(address.clone()).unwrap(),
             RequestProcessingResponse::Allow,
@@ -205,7 +208,7 @@ mod tests {
             "request #7 is not allowed at time 4 since no slots are free"
         );
 
-        clock.lock().unwrap().value = 5;
+        clock.lock().unwrap().value = Ticks(5);
         assert_eq!(
             rate_limiter.try_add_request(address.clone()).unwrap(),
             RequestProcessingResponse::Allow,
@@ -215,7 +218,7 @@ mod tests {
 
     #[test]
     fn ticks_work() {
-        let clock = Arc::new(Mutex::new(FixedClock { value: 1 }));
+        let clock = Arc::new(Mutex::new(FixedClock { value: Ticks(1) }));
         let mut rate_limiter = RateLimiter::new(clock.clone(), 1, 100);
 
         let address = SourceAddress::new("1.1.1.1");
@@ -225,14 +228,14 @@ mod tests {
             "request #1 is allowed"
         );
 
-        clock.lock().unwrap().value = 100;
+        clock.lock().unwrap().value = Ticks(100);
         assert_eq!(
             rate_limiter.try_add_request(address.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #2 is not allowed at time 100"
         );
 
-        clock.lock().unwrap().value = 101;
+        clock.lock().unwrap().value = Ticks(101);
         assert_eq!(
             rate_limiter.try_add_request(address.clone()).unwrap(),
             RequestProcessingResponse::Allow,

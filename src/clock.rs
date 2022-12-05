@@ -1,9 +1,10 @@
 use time::OffsetDateTime;
 
-pub type Ticks = i64;
+#[derive(Clone, Copy)]
+pub struct Ticks(pub i64);
 
 pub trait Clock {
-    fn current_timestamp(&self) -> Ticks;
+    fn ticks_elapsed(&self) -> Ticks;
 }
 
 pub struct FixedClock {
@@ -11,7 +12,7 @@ pub struct FixedClock {
 }
 
 impl Clock for FixedClock {
-    fn current_timestamp(&self) -> Ticks {
+    fn ticks_elapsed(&self) -> Ticks {
         self.value
     }
 }
@@ -19,10 +20,12 @@ impl Clock for FixedClock {
 pub struct UnixEpochMillisecondsClock {}
 
 impl Clock for UnixEpochMillisecondsClock {
-    fn current_timestamp(&self) -> Ticks {
+    fn ticks_elapsed(&self) -> Ticks {
         let nanos = OffsetDateTime::now_utc().unix_timestamp_nanos();
-        let millis = nanos / 1_000_000;
-        millis as Ticks
+        let millis: i64 = (nanos / 1_000_000)
+            .try_into()
+            .expect("Should not overflow 64 bits");
+        Ticks(millis)
     }
 }
 
@@ -34,6 +37,6 @@ mod tests {
     fn unix_clock_works() {
         let clock = UnixEpochMillisecondsClock {};
         // Approximate timestamp at the time of writing this code
-        assert!(clock.current_timestamp() > 1_669_132_053_000);
+        assert!(clock.ticks_elapsed().0 > 1_669_132_053_000);
     }
 }
