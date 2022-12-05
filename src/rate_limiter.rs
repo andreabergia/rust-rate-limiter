@@ -8,17 +8,6 @@ use crate::{
     error::RateLimiterError,
 };
 
-#[derive(Debug, Clone)]
-struct RequestTimestamp {
-    timestamp: i64,
-}
-
-impl RequestTimestamp {
-    fn new(ticks: Ticks) -> RequestTimestamp {
-        RequestTimestamp { timestamp: ticks.0 }
-    }
-}
-
 #[derive(Debug, Default, Hash, Eq, PartialEq, Clone)]
 pub struct RequestKey(String);
 
@@ -35,7 +24,7 @@ where
     clock: Arc<Mutex<C>>,
     limit: usize,
     ticks: usize,
-    requests: HashMap<RequestKey, VecDeque<RequestTimestamp>>,
+    requests: HashMap<RequestKey, VecDeque<Ticks>>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -60,7 +49,7 @@ where
     }
 
     pub fn try_add_request(&mut self, key: RequestKey) -> RequestProcessingResult {
-        let now = RequestTimestamp::new(self.clock.lock()?.ticks_elapsed());
+        let now = self.clock.lock()?.ticks_elapsed();
         let requests = self.requests.get(&key);
         if let Some(requests) = requests {
             self.add_to_existing_requests(key, now, requests.clone())
@@ -72,8 +61,8 @@ where
     fn add_to_existing_requests(
         &mut self,
         key: RequestKey,
-        now: RequestTimestamp,
-        mut requests: VecDeque<RequestTimestamp>,
+        now: Ticks,
+        mut requests: VecDeque<Ticks>,
     ) -> RequestProcessingResult {
         if requests.len() < self.limit {
             requests.push_back(now);
@@ -87,8 +76,8 @@ where
     fn check_if_slots_can_be_freed(
         &mut self,
         key: RequestKey,
-        now: RequestTimestamp,
-        mut requests: VecDeque<RequestTimestamp>,
+        now: Ticks,
+        mut requests: VecDeque<Ticks>,
     ) -> RequestProcessingResult {
         while self.can_be_discarded(requests.front(), &now) {
             requests.pop_front();
@@ -103,18 +92,14 @@ where
         }
     }
 
-    fn can_be_discarded(&self, front: Option<&RequestTimestamp>, now: &RequestTimestamp) -> bool {
+    fn can_be_discarded(&self, front: Option<&Ticks>, now: &Ticks) -> bool {
         match front {
-            Some(req) => (req.timestamp + (self.limit * self.ticks) as i64) <= now.timestamp,
+            Some(req) => (req.0 + (self.limit * self.ticks) as i64) <= now.0,
             None => false,
         }
     }
 
-    fn add_request_for_new_key(
-        &mut self,
-        key: RequestKey,
-        now: RequestTimestamp,
-    ) -> RequestProcessingResult {
+    fn add_request_for_new_key(&mut self, key: RequestKey, now: Ticks) -> RequestProcessingResult {
         let mut requests = VecDeque::with_capacity(self.limit);
         requests.push_back(now);
         self.requests.insert(key, requests);
