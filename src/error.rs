@@ -1,24 +1,16 @@
-use std::{fmt, sync::PoisonError};
+use std::sync::PoisonError;
 
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum RateLimiterError {
+    #[error("threading problem")]
     ThreadingProblem,
 }
 
 pub type Result<T> = std::result::Result<T, RateLimiterError>;
-
-impl fmt::Display for RateLimiterError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RateLimiterError::ThreadingProblem => write!(f, "Threading problem"),
-        }
-    }
-}
-
-impl std::error::Error for RateLimiterError {}
 
 impl<C> From<PoisonError<C>> for RateLimiterError {
     fn from(_: PoisonError<C>) -> Self {
