@@ -19,9 +19,9 @@ jobs:
           rustup update
           rustup component add clippy
 
-      - name: Lint
+      - name: Test and lint
         run: |
-          cargo fmt -- --check
-          cargo clippy -- -D warnings
           cargo check
           cargo test --all
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
