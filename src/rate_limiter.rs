@@ -48,7 +48,7 @@ where
         }
     }
 
-    pub fn try_add_request(&mut self, key: RequestKey) -> RequestProcessingResult {
+    pub fn add_request(&mut self, key: RequestKey) -> RequestProcessingResult {
         let now = self.clock.lock()?.ticks_elapsed();
         let requests = self.requests.get(&key);
         if let Some(requests) = requests {
@@ -123,24 +123,24 @@ mod tests {
 
         let key = RequestKey::new("1.1.1.1");
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "first request is allowed"
         );
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "second request is allowed"
         );
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "third request is denied"
         );
 
         let key_2 = RequestKey::new("2.2.2.2");
         assert_eq!(
-            rate_limiter.try_add_request(key_2).unwrap(),
+            rate_limiter.add_request(key_2).unwrap(),
             RequestProcessingResponse::Allow,
             "a request on another key is allowed"
         );
@@ -153,50 +153,50 @@ mod tests {
         let mut rate_limiter = RateLimiter::new(Arc::clone(&clock), 2, 1);
 
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #1 is allowed at time 1"
         );
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #2 is allowed at time 1"
         );
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #3 is not allowed at time 1"
         );
 
         clock.lock().unwrap().value = Ticks(2);
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #4 is not allowed at time 2 since slots are used"
         );
 
         clock.lock().unwrap().value = Ticks(3);
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #5 is allowed at time 3 since time passed and two slots freed"
         );
 
         clock.lock().unwrap().value = Ticks(4);
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #6 is allowed at time 4 since one slot is free"
         );
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #7 is not allowed at time 4 since no slots are free"
         );
 
         clock.lock().unwrap().value = Ticks(5);
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #7 is allowed at time 5 since one slot is free"
         );
@@ -209,21 +209,21 @@ mod tests {
 
         let key = RequestKey::new("1.1.1.1");
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #1 is allowed"
         );
 
         clock.lock().unwrap().value = Ticks(100);
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Deny,
             "request #2 is not allowed at time 100"
         );
 
         clock.lock().unwrap().value = Ticks(101);
         assert_eq!(
-            rate_limiter.try_add_request(key.clone()).unwrap(),
+            rate_limiter.add_request(key.clone()).unwrap(),
             RequestProcessingResponse::Allow,
             "request #3 is again allowed at time 101"
         );

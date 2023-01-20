@@ -42,7 +42,7 @@ async fn say_hello_rate_limited(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Result<impl IntoResponse> {
     let address = RequestKey::new(&format!("{}", addr.ip()));
-    let result = rate_limiter.lock()?.try_add_request(address)?;
+    let result = rate_limiter.lock()?.add_request(address)?;
     info!("request from client {}: {:?}", addr, result);
     match result {
         RequestProcessingResponse::Allow => Ok((StatusCode::OK, "Hello!").into_response()),
